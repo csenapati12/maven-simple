@@ -1,0 +1,156 @@
+pipeline:
+  name: enterprise-cicd
+  identifier: enterprise_cicd
+
+  stages:
+
+  # =========================
+  # 1. CI BUILD STAGE
+  # =========================
+    - stage:
+        name: Build_and_Test
+        identifier: build_test
+        type: CI
+        spec:
+          infrastructure:
+            type: Cloud
+            spec: {}
+
+          execution:
+            steps:
+
+              # Clone Code
+              - step:
+                  type: GitClone
+                  name: Clone
+                  spec:
+                    connectorRef: Github
+                    repoName: enterprise-app
+                    build:
+                      type: branch
+                      spec:
+                        branch: main
+
+              # Build (Java)
+              - step:
+                  type: Run
+                  name: Maven Build
+                  spec:
+                    image: maven:3.9.6-eclipse-temurin-17
+                    shell: Sh
+                    command: |
+                      mvn clean install
+
+              # Unit Tests
+              - step:
+                  type: Run
+                  name: Run Tests
+                  spec:
+                    image: maven:3.9.6-eclipse-temurin-17
+                    command: mvn test
+
+              # Build Docker Image
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build_and_Push
+                  spec:
+                    connectorRef: dockerhub_conn
+                    repo: enterprise/app
+                    tags:
+                      - <+pipeline.sequenceId>
+
+              # Security Scan (Example)
+              - step:
+                  type: Run
+                  name: Security Scan
+                  spec:
+                    image: aquasec/trivy
+                    command: |
+                      trivy image enterprise/app:<+pipeline.sequenceId>
+
+  # =========================
+  # 2. DEV DEPLOYMENT
+  # =========================
+    - stage:
+        name: Deploy_Dev
+        identifier: deploy_dev
+        type: Deployment
+        spec:
+          service:
+            serviceRef: app_service
+
+          environment:
+            environmentRef: dev_env
+
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Deploy_to_Dev
+
+  # =========================
+  # 3. QA STAGE
+  # =========================
+    - stage:
+        name: QA_Testing
+        identifier: qa_testing
+        type: Deployment
+        spec:
+          service:
+            serviceRef: app_service
+
+          environment:
+            environmentRef: qa_env
+
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Deploy_to_QA
+
+              - step:
+                  type: Run
+                  name: Integration Tests
+                  spec:
+                    shell: Sh
+                    command: |
+                      echo "Running integration tests..."
+
+  # =========================
+  # 4. APPROVAL STAGE
+  # =========================
+    - stage:
+        name: Approval
+        identifier: approval
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: HarnessApproval
+                  name: Approve_Prod
+                  spec:
+                    approvers:
+                      userGroups:
+                        - devops-team
+                    timeout: 1d
+
+  # =========================
+  # 5. PROD DEPLOYMENT
+  # =========================
+    - stage:
+        name: Deploy_Prod
+        identifier: deploy_prod
+        type: Deployment
+        spec:
+          service:
+            serviceRef: app_service
+
+          environment:
+            environmentRef: prod_env
+
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Deploy_to_Prod
