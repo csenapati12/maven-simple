@@ -1,6 +1,8 @@
 pipeline:
   name: enterprise-cicd
   identifier: enterprise_cicd
+  projectIdentifier: harnessci
+  orgIdentifier: default
 
   stages:
 
@@ -23,9 +25,10 @@ pipeline:
               - step:
                   type: GitClone
                   name: Clone
+                  identifier: clone_code
                   spec:
                     connectorRef: Github
-                    repoName: enterprise-app
+                    repoName: maven-simple
                     build:
                       type: branch
                       spec:
@@ -35,122 +38,40 @@ pipeline:
               - step:
                   type: Run
                   name: Maven Build
+                  identifier: maven_build
                   spec:
                     image: maven:3.9.6-eclipse-temurin-17
                     shell: Sh
-                    command: |
-                      mvn clean install
+                    command: mvn clean install
 
               # Unit Tests
               - step:
                   type: Run
                   name: Run Tests
+                  identifier: run_tests
                   spec:
                     image: maven:3.9.6-eclipse-temurin-17
+                    shell: Sh
                     command: mvn test
 
               # Build Docker Image
               - step:
                   type: BuildAndPushDockerRegistry
                   name: Build_and_Push
+                  identifier: build_push
                   spec:
                     connectorRef: dockerhub_conn
                     repo: enterprise/app
                     tags:
                       - <+pipeline.sequenceId>
 
-              # Security Scan (Example)
+              # Security Scan
               - step:
                   type: Run
                   name: Security Scan
+                  identifier: security_scan
                   spec:
                     image: aquasec/trivy
-                    command: |
-                      trivy image enterprise/app:<+pipeline.sequenceId>
-
-  # =========================
-  # 2. DEV DEPLOYMENT
-  # =========================
-    - stage:
-        name: Deploy_Dev
-        identifier: deploy_dev
-        type: Deployment
-        spec:
-          service:
-            serviceRef: app_service
-
-          environment:
-            environmentRef: dev_env
-
-          execution:
-            steps:
-              - step:
-                  type: K8sRollingDeploy
-                  name: Deploy_to_Dev
-
-  # =========================
-  # 3. QA STAGE
-  # =========================
-    - stage:
-        name: QA_Testing
-        identifier: qa_testing
-        type: Deployment
-        spec:
-          service:
-            serviceRef: app_service
-
-          environment:
-            environmentRef: qa_env
-
-          execution:
-            steps:
-              - step:
-                  type: K8sRollingDeploy
-                  name: Deploy_to_QA
-
-              - step:
-                  type: Run
-                  name: Integration Tests
-                  spec:
                     shell: Sh
                     command: |
-                      echo "Running integration tests..."
-
-  # =========================
-  # 4. APPROVAL STAGE
-  # =========================
-    - stage:
-        name: Approval
-        identifier: approval
-        type: Approval
-        spec:
-          execution:
-            steps:
-              - step:
-                  type: HarnessApproval
-                  name: Approve_Prod
-                  spec:
-                    approvers:
-                      userGroups:
-                        - devops-team
-                    timeout: 1d
-
-  # =========================
-  # 5. PROD DEPLOYMENT
-  # =========================
-    - stage:
-        name: Deploy_Prod
-        identifier: deploy_prod
-        type: Deployment
-        spec:
-          service:
-            serviceRef: app_service
-
-          environment:
-            environmentRef: prod_env
-
-          execution:
-            steps:
-              - step:
-                  type: K8sRollingDeploy
-                  name: Deploy_to_Prod
+                      trivy image enterprise/app:<+pipeline.sequenceId> 
