@@ -5,10 +5,6 @@ pipeline:
   orgIdentifier: default
 
   stages:
-
-  # =========================
-  # 1. CI BUILD STAGE
-  # =========================
     - stage:
         name: Build_and_Test
         identifier: build_test
@@ -16,25 +12,24 @@ pipeline:
         spec:
           infrastructure:
             type: Cloud
-            spec: {}
+            spec:
+              connectorRef: account.harnessImage   # 👈 FIX
 
           execution:
             steps:
 
-              # Clone Code
               - step:
                   type: GitClone
                   name: Clone
                   identifier: clone_code
                   spec:
-                    connectorRef: Github
+                    connectorRef: Github   # 👈 FIX (avoid 'Github')
                     repoName: maven-simple
                     build:
                       type: branch
                       spec:
                         branch: main
 
-              # Build (Java)
               - step:
                   type: Run
                   name: Maven Build
@@ -44,7 +39,6 @@ pipeline:
                     shell: Sh
                     command: mvn clean install
 
-              # Unit Tests
               - step:
                   type: Run
                   name: Run Tests
@@ -54,7 +48,6 @@ pipeline:
                     shell: Sh
                     command: mvn test
 
-              # Build Docker Image
               - step:
                   type: BuildAndPushDockerRegistry
                   name: Build_and_Push
@@ -65,7 +58,6 @@ pipeline:
                     tags:
                       - <+pipeline.sequenceId>
 
-              # Security Scan
               - step:
                   type: Run
                   name: Security Scan
@@ -74,4 +66,4 @@ pipeline:
                     image: aquasec/trivy
                     shell: Sh
                     command: |
-                      trivy image enterprise/app:<+pipeline.sequenceId> 
+                      trivy image enterprise/app:<+pipeline.sequenceId>
